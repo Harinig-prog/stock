@@ -36,6 +36,13 @@ class EnhancedSentimentAnalyzer:
                 'maintain', 'hold', 'stable', 'steady', 'consistent', 'regular', 'routine'
             ]
         }
+        # Match keywords as whole words (plus plain -s/-ed/-ing endings). A bare
+        # substring check counts "up" in "update"/"support", "gain" in "against"
+        # and "rise" in "enterprise", which skews neutral headlines.
+        self._keyword_patterns = {
+            category: [re.compile(rf"\b{re.escape(word)}(?:s|es|d|ed|ing)?\b") for word in words]
+            for category, words in self.financial_keywords.items()
+        }
         logging.info("Enhanced sentiment analyzer initialized with financial context")
     
     def analyze_text_sentiment(self, text: str) -> Dict:
@@ -116,9 +123,10 @@ class EnhancedSentimentAnalyzer:
         Returns:
             float: Financial context score (-1 to 1)
         """
-        positive_count = sum(1 for word in self.financial_keywords['positive'] if word in text)
-        negative_count = sum(1 for word in self.financial_keywords['negative'] if word in text)
-        neutral_count = sum(1 for word in self.financial_keywords['neutral'] if word in text)
+        counts = self._count_keyword_matches(text)
+        positive_count = counts['positive']
+        negative_count = counts['negative']
+        neutral_count = counts['neutral']
         
         total_keywords = positive_count + negative_count + neutral_count
         
@@ -157,9 +165,8 @@ class EnhancedSentimentAnalyzer:
             Dict: Count of keyword matches
         """
         return {
-            'positive': sum(1 for word in self.financial_keywords['positive'] if word in text),
-            'negative': sum(1 for word in self.financial_keywords['negative'] if word in text),
-            'neutral': sum(1 for word in self.financial_keywords['neutral'] if word in text)
+            category: sum(1 for pattern in patterns if pattern.search(text))
+            for category, patterns in self._keyword_patterns.items()
         }
     
     def analyze_news_articles(self, articles: List[Dict]) -> Tuple[List[Dict], Dict]:
